@@ -2,23 +2,19 @@
 using Azure.Storage.Sas;
 using Azure.Storage;
 using Microsoft.Extensions.Configuration;
-using System.IO;
-
-//string filePath = Path.GetRelativePath(AppDomain.CurrentDomain.BaseDirectory, @"..\..\secrets.json");
 
 var config = new ConfigurationBuilder()
-    //.SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-    //.AddJsonFile(filePath)
     .AddUserSecrets<Program>()
     .Build();
     
 var configSection = config.GetSection("Storage");
 string _BlobStorageConnectionString = configSection.GetValue<string>("ConnectionString");
+string _AccountName = configSection.GetValue<string>("AccountName");
+string _AccountKey = configSection.GetValue<string>("AccountKey");
 string _ContainerName = "authors";
-string _AccountKey = configSection.GetValue<string>("AccountName");
 string _BlobName = "About-KK.Html";
-string _BaseUrlPrimary = "https://ctokk.blob.core.windows.net";
-string _BaseUrlSecondary = "https://ctokk-secondary.blob.core.windows.net";
+string _BaseUrlPrimary = $"https://{_AccountName}.blob.core.windows.net";
+string _BaseUrlSecondary = $"https://{_AccountName}-secondary.blob.core.windows.net";
 
 Console.WriteLine("1.  Connecting to Azure Blob Service.");
 BlobServiceClient serviceClient = new BlobServiceClient(_BlobStorageConnectionString);
@@ -46,7 +42,7 @@ finally{
     reader.Close();
 }
 BlobClient blobClient = new BlobClient(new Uri($"{_BaseUrlPrimary}/{_ContainerName}/{_BlobName}"),
-    new StorageSharedKeyCredential("ctokk", _AccountKey)
+    new StorageSharedKeyCredential(_AccountName, _AccountKey)
 );
 
 BlobSasBuilder b = new BlobSasBuilder();
@@ -61,6 +57,18 @@ if(blobClient.CanGenerateSasUri){
     Console.WriteLine(sasUrl.ToString());
 }
 blobClient.DownloadTo($".\\{_ContainerName}\\dl-about-kk.html");
+
+Console.WriteLine("Read contents from Secondary End-Point");
+BlobContainerClient secContainerClient = new BlobContainerClient(new Uri($"{_BaseUrlSecondary}/{_ContainerName}"),
+    new StorageSharedKeyCredential(_AccountName, _AccountKey)
+);
+
+Console.WriteLine($"Reading Contents of {_ContainerName}");
+foreach(var blob in secContainerClient.GetBlobs()){
+    Console.WriteLine($"\t{blob.Name}");
+}
+Console.WriteLine("Finished Reading Container Contents.");
+
 
 Console.WriteLine("XX.  Deleting 'authors' container.");
 containerClient.DeleteIfExists();
