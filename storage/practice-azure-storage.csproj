@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>practice_azure_storage</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>bfe6938c-f952-4a55-b27a-310f4e798850</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Azure.Storage.Blobs" Version="*"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="*"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="*"/>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="*"/>
+  </ItemGroup>
+</Project>
