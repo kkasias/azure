@@ -22,70 +22,93 @@ public class QueueRunner : RunnerBase
 	Console.WriteLine("Starting Queue Runner");
 
 	await CreateQueue(queueName);
-	InsertMessage(queueName, "Message", 20);
+	SendReceipt receipt = InsertMessage(queueName, "Message", 20);
 	// Display number of messages.
 	Console.WriteLine($"Number of messages in queue: {GetQueueLength(queueName)}");
 	PeekNextMessage(queueName);
-	
+
+	if(receipt?.MessageId != null)
+	{
+		UpdateMessage(queueName, receipt);
+	}
+
 	DequeueMessage(queueName);
 	Console.WriteLine($"Number of messages in queue: {GetQueueLength(queueName)}");
 
 	DequeueMessageNoDelete(queueName);
 	Console.WriteLine($"Number of messages in queue: {GetQueueLength(queueName)}");
 
+	DequeueAllMessages(queueName);
+
 	Console.WriteLine("Ending Queue Runner");
+  }
+
+  private void DequeueAllMessages(string queueName)
+  {
+	  QueueClient queueClient = GetQueueClient(queueName);
+
+	  Console.WriteLine("Dequeuing all messages:");
+
+	  var msg = queueClient.ReceiveMessage();
+	  while (msg.Value != null)
+	  {
+		  Console.WriteLine(msg.Value.Body.ToString());
+		  queueClient.DeleteMessage(msg.Value.MessageId, msg.Value.PopReceipt);
+		  msg = queueClient.ReceiveMessage();
+	  }
+	  Console.WriteLine("Queue is empty");
   }
 
   private void DequeueMessageNoDelete(string queueName)
   {
-	  QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
+	QueueClient queueClient = GetQueueClient(queueName);
 
-	  // Get the next message
-	  QueueMessage[] retrievedMessage = queueClient.ReceiveMessages();
+	// Get the next message
+	QueueMessage[] retrievedMessage = queueClient.ReceiveMessages();
 
-	  // Process (i.e. print) the message in less than 30 seconds
-	  Console.WriteLine($"Dequeued message: '{retrievedMessage[0].Body}'");
-	  // Because no delete message will be re-queued. DequeueCount will be +1 and it will be at the end of the queue
-	  Thread.Sleep(35000);
+	// Process (i.e. print) the message in less than 30 seconds
+	Console.WriteLine($"Dequeued message: '{retrievedMessage[0].Body}'");
+	// Because no delete message will be re-queued. DequeueCount will be +1 and it will be at the end of the queue
+	Thread.Sleep(35000);
   }
 
   private void DequeueMessage(string queueName)
   {
-	  QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
+	QueueClient queueClient = GetQueueClient(queueName);
 
-	  // Get the next message
-	  QueueMessage[] retrievedMessage = queueClient.ReceiveMessages();
+	// Get the next message
+	QueueMessage[] retrievedMessage = queueClient.ReceiveMessages();
 
-	  // Process (i.e. print) the message in less than 30 seconds
-	  Console.WriteLine($"Dequeued message: '{retrievedMessage[0].Body}'");
+	// Process (i.e. print) the message in less than 30 seconds
+	Console.WriteLine($"Dequeued message: '{retrievedMessage[0].Body}'");
 
-	  // Delete the message
-	  queueClient.DeleteMessage(retrievedMessage[0].MessageId, retrievedMessage[0].PopReceipt);
-	  Console.WriteLine("Deleted Message.");
+	// Delete the message
+	queueClient.DeleteMessage(retrievedMessage[0].MessageId, retrievedMessage[0].PopReceipt);
+	Console.WriteLine("Deleted Message.");
   }
   private void PeekNextMessage(string queueName)
   {
-	  QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
-	  var msg = queueClient.PeekMessage();
-	  if (msg == null)
-		  return;
+	QueueClient queueClient = GetQueueClient(queueName);
+	var msg = queueClient.PeekMessage();
+	if (msg == null)
+	  return;
 
-	  Console.WriteLine(msg.Value.Body.ToString());
+	Console.WriteLine(msg.Value.Body.ToString());
   }
 
   public async Task<bool> CreateQueue(string queueName)
   {
-	QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
-	bool retVal = false;
+	QueueClient queueClient = GetQueueClient(queueName);
+	bool retVal;
 
 	try
-	{ 
-		await queueClient.CreateIfNotExistsAsync();
-	  if(await queueClient.ExistsAsync())
+	{
+	  await queueClient.CreateIfNotExistsAsync();
+	  if (await queueClient.ExistsAsync())
 		retVal = true;
 	  else
 	  {
-		  retVal = false;
+		retVal = false;
 	  }
 	}
 	catch (Exception e)
@@ -97,45 +120,60 @@ public class QueueRunner : RunnerBase
 	return retVal;
   }
 
-  public void InsertMessage(string queueName, string messageBody, int messageCount)
+  public SendReceipt InsertMessage(string queueName, string messageBody, int messageCount)
   {
-	QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
+	QueueClient queueClient = GetQueueClient(queueName);
 
 	try
 	{
-		if (GetQueueLength(queueName) <= 0)
+	  if (GetQueueLength(queueName) <= 0)
+	  {
+		for (int i = 0; i < messageCount; i++)
 		{
-			for (int i = 0; i < messageCount; i++)
-			{
-				queueClient.SendMessage($"{messageBody} - {i}");
-			}
+		  var response = queueClient.SendMessage($"{messageBody} - {i}");
+		  return response.Value;
 		}
+	  }
 	}
 	catch (Exception e)
 	{
-		Console.WriteLine(e);
-		throw;
+	  Console.WriteLine(e);
+	  throw;
 	}
+
+	return null;
   }
 
-//-----------------------------------------------------
-// Get the approximate number of messages in the queue
-//-----------------------------------------------------
+  public void UpdateMessage(string queueName, SendReceipt receipt)
+  {
+	QueueClient queueClient = GetQueueClient(queueName);
+
+	queueClient.UpdateMessage(receipt.MessageId, receipt.PopReceipt, "This message was updated.");
+  }
+  //-----------------------------------------------------
+  // Get the approximate number of messages in the queue
+  //-----------------------------------------------------
   public int GetQueueLength(string queueName)
   {
-	  // Instantiate a QueueClient which will be used to manipulate the queue
-	  QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
+	// Instantiate a QueueClient which will be used to manipulate the queue
+	QueueClient queueClient = GetQueueClient(queueName);
 
-	  if (queueClient.Exists())
-	  {
-		  QueueProperties properties = queueClient.GetProperties();
+	if (queueClient.Exists())
+	{
+	  QueueProperties properties = queueClient.GetProperties();
 
-		  // Retrieve the cached approximate message count.
-		  int cachedMessagesCount = properties.ApproximateMessagesCount;
+	  // Retrieve the cached approximate message count.
+	  int cachedMessagesCount = properties.ApproximateMessagesCount;
 
-		  return cachedMessagesCount;
-	  }
+	  return cachedMessagesCount;
+	}
 
-	  return -1;
+	return -1;
+  }
+
+  private QueueClient GetQueueClient(string queueName)
+  {
+	// Instantiate a QueueClient which will be used to manipulate the queue
+	return new QueueClient(_StorageConnectionString, queueName);
   }
 }
