@@ -88,6 +88,9 @@ public class QueueRunner : RunnerBase
 	// Get the next message
 	QueueMessage[] retrievedMessage = queueClient.ReceiveMessages();
 
+	if (retrievedMessage.Length == 0)
+		return;
+
 	// Process (i.e. print) the message in less than 30 seconds
 	Console.WriteLine($"Dequeued message: '{retrievedMessage[0].Body}'");
 	// Because no delete message will be re-queued. DequeueCount will be +1 and it will be at the end of the queue
@@ -152,7 +155,7 @@ public class QueueRunner : RunnerBase
 	  {
 		for (int i = 0; i < messageCount; i++)
 		{
-		  var response = queueClient.SendMessage($"{messageBody} - {i}");
+		  var response = queueClient.SendMessage($"{messageBody}");
 		  return response.Value;
 		}
 	  }
@@ -192,6 +195,11 @@ public class QueueRunner : RunnerBase
 
 	return -1;
   }
+  private QueueClient GetQueueClient(string queueName)
+  {
+	// Instantiate a QueueClient which will be used to manipulate the queue
+	return new QueueClient(_StorageConnectionString, queueName);
+  }
 }
 
 public class WIP 
@@ -200,9 +208,5 @@ public class WIP
     public bool StepOneCompleted { get; set; }
     public bool StepTwoCompleted { get; set; }
 
-  private QueueClient GetQueueClient(string queueName)
-  {
-	// Instantiate a QueueClient which will be used to manipulate the queue
-	return new QueueClient(_StorageConnectionString, queueName);
-  }
+
 }
