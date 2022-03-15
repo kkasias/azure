@@ -1,8 +1,10 @@
 using System.Net;
 using Azure.Storage;
+using Azure.Storage.Blobs.Models;
 using Azure.Storage.Queues;
 using Azure.Storage.Queues.Models;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
 
 namespace Cto.KK.Queue;
 
@@ -38,25 +40,45 @@ public class QueueRunner : RunnerBase
 	DequeueMessageNoDelete(queueName);
 	Console.WriteLine($"Number of messages in queue: {GetQueueLength(queueName)}");
 
-	DequeueAllMessages(queueName);
+    ClearQueue(queueName);
 
+	//Setup a scenario where a msg is put on the queue for processing with progress updated back in to the message.  Simulate a failure and examine the queue msg values after
+	// dequeuing the msg again.
+    WIP test = new WIP();
+    test.Submitted = true;
+    string json = JsonSerializer.Serialize(test);
+	InsertMessage(queueName, json, 1);
+    TestUpdateBehaviour(queueName);
 	Console.WriteLine("Ending Queue Runner");
   }
 
-  private void DequeueAllMessages(string queueName)
+  private void TestUpdateBehaviour(string queueName)
   {
-	  QueueClient queueClient = GetQueueClient(queueName);
+      QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
+      var msg = queueClient.ReceiveMessage(TimeSpan.FromSeconds(5)).Value;
 
-	  Console.WriteLine("Dequeuing all messages:");
+      if (msg.Body is null)
+          return;
 
-	  var msg = queueClient.ReceiveMessage();
-	  while (msg.Value != null)
-	  {
-		  Console.WriteLine(msg.Value.Body.ToString());
-		  queueClient.DeleteMessage(msg.Value.MessageId, msg.Value.PopReceipt);
-		  msg = queueClient.ReceiveMessage();
-	  }
-	  Console.WriteLine("Queue is empty");
+      WIP test = JsonSerializer.Deserialize<WIP>(msg.Body);
+      test.StepOneCompleted = true;
+
+      string json = JsonSerializer.Serialize(test);
+
+      queueClient.UpdateMessage(msg.MessageId, msg.PopReceipt, json);
+	  Thread.Sleep(10000);
+
+      var msg2 = queueClient.ReceiveMessage().Value;
+      WIP test2 = JsonSerializer.Deserialize<WIP>(msg2.Body);
+	  Console.WriteLine($"Value of Test2.StepOneCompleted: {test2.StepOneCompleted}");
+      queueClient.DeleteMessage(msg2.MessageId, msg2.PopReceipt);
+  }
+
+	private void ClearQueue(string queueName)
+  {
+		QueueClient queueClient = new QueueClient(_StorageConnectionString, queueName);
+
+        queueClient.ClearMessages();
   }
 
   private void DequeueMessageNoDelete(string queueName)
@@ -170,6 +192,13 @@ public class QueueRunner : RunnerBase
 
 	return -1;
   }
+}
+
+public class WIP 
+{
+    public bool Submitted { get; set; }
+    public bool StepOneCompleted { get; set; }
+    public bool StepTwoCompleted { get; set; }
 
   private QueueClient GetQueueClient(string queueName)
   {
